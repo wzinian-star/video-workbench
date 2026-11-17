@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>视频工作台</title><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script></head>
+<body data-ui>
+<header class="top">
+  <div class="brand"><svg class="mark" viewBox="0 0 30 30" width="31" height="31" fill="none" aria-hidden="true"><path d="M4 7.5h22v15H4zM8 7.5v15m14-15v15M4 12h4m-4 6h4m14-6h4m-4 6h4M13 12v6l5-3-5-3Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>视频工作台</span></div>
+  <div class="flow" aria-label="制作步骤"><span>选参考</span><span>→</span><span>做样片</span><span>→</span><span>审片后做全片</span></div>
+  <span class="local-tag">Mac 本地工作区</span>
+</header>
+<div class="workspace">
+  <aside id="library" class="panel library" aria-labelledby="library-title">
+    <div class="panel-head"><h1 id="library-title">素材库</h1><button class="btn compact" id="import-open" type="button" aria-label="加入素材">＋ 加入素材</button></div>
+    <label class="sr" for="search">搜索素材</label><input id="search" type="search" placeholder="搜索名称或素材编号" autocomplete="off">
+    <div class="filters" id="filters" aria-label="素材分类"></div>
+    <p class="counter" id="asset-count">正在读取素材…</p>
+    <div class="asset-list" id="assets"></div>
+  </aside>
+  <main id="brief" class="panel brief" aria-labelledby="brief-title">
+    <div class="panel-head"><h2 id="brief-title">制作单</h2><span id="reference-total" class="counter">已选 0 条</span></div>
+    <form id="job-form">
+      <div class="fields">
+        <label>视频标题<input id="title" name="title" required maxlength="160" placeholder="如：在西班牙，告别不止一句 adiós"></label>
+        <div class="workflow-field"><label for="skill">制作流程</label><div class="inline-control"><select id="skill" name="skill" required><option value="">正在读取流程…</option></select><button class="btn compact" id="workflow-open" type="button">＋ 新增工作流</button></div></div>
+      </div>
+      <div id="skill-description" class="workflow-description"></div>
+      <section class="voice-section" aria-labelledby="voice-label">
+        <label id="voice-label" for="voice-asset">本集音轨 <span id="voice-required" class="voice-required" aria-hidden="true" hidden>必选</span></label>
+        <div class="inline-control"><select id="voice-asset" name="voice_asset_id" aria-describedby="voice-help"><option value="">不指定本集音轨</option></select><button class="btn compact" id="voice-import" type="button">＋ 导入本集音轨</button></div>
+        <p id="voice-help" class="help" aria-live="polite"></p><audio id="voice-monitor" class="voice-monitor" controls preload="none" aria-label="试听本集音轨" hidden></audio>
+      </section>
+      <label class="script-label">脚本<textarea id="script" name="script" required maxlength="30000" rows="6" placeholder="把你的脚本完整贴在这里。需要逐字照用的台词，也请写在这里。"></textarea></label>
+      <section class="refs" aria-labelledby="reference-title">
+        <div class="section-head"><h3 id="reference-title">这次参考什么</h3><span class="counter">没选的素材不会加入制作单</span></div>
+        <div id="references" class="references"></div>
+      </section>
+      <p id="form-error" class="error" role="alert" hidden></p>
+      <div class="form-actions"><div><strong>先审样片，再做全片。</strong><p>只制作，不发布。样片通过后，已确认片段不重画、不重配。</p></div><div class="run-actions"><button class="btn" id="start-storyboard" type="submit" disabled>先做无声分镜预览</button><button class="btn primary" id="start-job" type="submit" disabled>做有声样片 <span aria-hidden="true">→</span></button></div></div>
+    </form>
+  </main>
+  <aside class="panel jobs" id="production" aria-labelledby="jobs-title">
+    <div class="panel-head"><h2 id="jobs-title">制作进度</h2><button id="refresh" class="btn compact" type="button">刷新</button></div>
+    <div id="job-content" aria-live="polite"></div>
+    <div class="jobs-history" id="job-history"></div>
+  </aside>
+</div>
+<footer><span>素材来源与参考用途分开记录。</span><span>选中素材会供 Codex 制作使用。第三方作品默认只参考，不剪进成片。</span></footer>
+<div id="notice" class="notice" role="status" hidden></div>
+<dialog id="import-dialog" aria-labelledby="import-title">
+  <form id="import-form" class="dialog-body">
+    <div class="panel-head"><h2 id="import-title">加入素材</h2><button class="btn compact" type="button" data-close="import-dialog">关闭</button></div>
+    <p class="help">本地文件可预览；来源链接只做登记，不会自动抓取或分析。</p>
+    <label>素材名称<input name="title" required maxlength="160" placeholder="给素材一个好找的名字"></label>
+    <label>分类<select name="category"><option>待整理</option><option>自制</option><option>收藏参考</option></select></label>
+    <label>本地文件<input name="file" type="file" accept="video/*,image/*,audio/*,.mp4,.mov,.webm,.png,.jpg,.jpeg,.webp,.wav,.mp3,.m4a"></label>
+    <label>或来源链接<input name="url" type="url" placeholder="https://…" maxlength="2000"></label>
+    <label>备注<textarea name="notes" rows="2" maxlength="2000" placeholder="作者、来源、为什么想参考"></textarea></label>
+    <p id="import-error" class="error" role="alert" hidden></p>
+    <button class="btn primary" type="submit">保存到素材库</button>
+  </form>
+</dialog>
+<dialog id="workflow-dialog" aria-labelledby="workflow-title">
+  <form id="workflow-form" class="dialog-body">
+    <div class="panel-head"><h2 id="workflow-title">新增工作流</h2><button class="btn compact" type="button" data-close="workflow-dialog">关闭</button></div>
+    <p class="help">保存后可直接从「制作流程」选择。写给制作任务的步骤，不需要写命令或贴链接。</p>
+    <label>工作流名称<input name="title" required maxlength="80" placeholder="如：纪实讲述"></label>
+    <label>一句话介绍<input name="description" required maxlength="180" placeholder="如：用一手资料和短镜头讲清一个问题"></label>
+    <label>执行步骤<textarea name="details" required rows="7" maxlength="8000" placeholder="先怎么开场？画面、配音用什么规则？样片要验收什么？哪些内容不要自动修改？"></textarea></label>
+    <p class="error" id="workflow-error" role="alert" hidden></p>
+    <button class="btn primary" type="submit">保存并使用</button>
+  </form>
+</dialog>
+<dialog id="preview-dialog" aria-labelledby="preview-title">
+  <div class="dialog-body">
+    <div class="panel-head"><h2 id="preview-title">素材预览</h2><button class="btn compact" type="button" data-close="preview-dialog">关闭</button></div>
+    <div id="preview-content"></div>
+  </div>
+</dialog>
+</body></html>
