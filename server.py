@@ -18,6 +18,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import workflows
+import structure_analysis
+import structure_workflows
 
 CATEGORIES = {"自制", "收藏参考", "待整理"}
 MEDIA = {
@@ -40,7 +42,10 @@ AUDIO_ANALYZE_PATH = re.compile(r"/api/assets/([^/]+)/audio")
 CARDS_PATH = re.compile(r"/api/assets/([^/]+)/cards")
 APPROVE_PATH = re.compile(r"/api/jobs/([^/]+)/approve")
 STATIC = {"/": ("index.html", "text/html"), "/index.html": ("index.html", "text/html"),
-          "/app.js": ("app.js", "text/javascript"), "/style.css": ("style.css", "text/css")}
+          "/app.js": ("app.js", "text/javascript"), "/analysis.js": ("analysis.js", "text/javascript"),
+          "/style.css": ("style.css", "text/css")}
+ANALYSIS_PATH = re.compile(r"/api/assets/([^/]+)/(analysis|cancel|structure)")
+ANALYSIS_MEDIA = re.compile(r"/media/analysis/([A-Za-z0-9_-]+)/([0-9a-f]{32})/(frame-\d{3}\.jpg)")
 CATALOG_LOCK = threading.RLock()
 try:
     import jobs
@@ -128,11 +133,17 @@ def valid_url(value: str):
 
 class WorkbenchServer(ThreadingHTTPServer):
     daemon_threads = True
-    def __init__(self, root, port=8765):
+    def __init__(self, root, port=8765, ui_root=None):
         self.root = Path(root).resolve()
+        self.ui_root = Path(ui_root).resolve() if ui_root else self.root/"ui"
+        self.analysis = structure_analysis.AnalysisManager(self.root)
         self.token = secrets.token_urlsafe(24)
         super().__init__(("127.0.0.1", port), WorkbenchHandler)
         self.allowed_hosts = {f"127.0.0.1:{self.server_port}", f"localhost:{self.server_port}"}
+
+    def server_close(self):
+        self.analysis.shutdown()
+        super().server_close()
 
 
 class WorkbenchHandler(BaseHTTPRequestHandler):
@@ -201,15 +212,32 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
     def get(self, path, head):
         if path in STATIC:
             fname, typ = STATIC[path]
-            file = (self.root / "ui" / fname).resolve()
-            if not file.is_relative_to(self.root / "ui") or not file.is_file():
+            file = (self.server.ui_root / fname).resolve()
+            if not file.is_relative_to(self.server.ui_root) or not file.is_file():
                 raise RequestError("工作台页面文件还未就绪。", 404)
             self.send_file(file, typ + "; charset=utf-8", head, ranged=False)
         elif path == "/api/state":
             assets = [asset_response(self.root, item) for item in read_catalog(self.root)]
             skills = self.run_jobs(workflows.list_workflows, self.root)
             existing = jobs.list_jobs(self.root) if jobs else []
-            self.respond({"token":self.server.token,"assets":assets,"skills":skills,"jobs":existing}, head=head)
+            capabilities = {"ffmpeg":bool(structure_analysis._exe("ffmpeg") and structure_analysis._exe("ffprobe")),
+                            "ocr":bool(structure_analysis._exe("tesseract")),
+                            "transcription":bool(structure_analysis._whisper_setup(self.root) or
+                                (os.environ.get("VIDEO_WORKBENCH_WHISPER_CLI") and os.environ.get("VIDEO_WORKBENCH_WHISPER_MODEL"))),
+                            "codex":bool(structure_analysis._exe("codex"))}
+            self.respond({"token":self.server.token,"assets":assets,"skills":skills,"jobs":existing,
+                          "capabilities":capabilities}, head=head)
+        elif result := ANALYSIS_PATH.fullmatch(path):
+            self.find_asset(result[1])
+            if result[2] != "analysis": raise RequestError("页面不存在。",404)
+            self.respond(self.run_jobs(self.server.analysis.get,result[1]),head=head)
+        elif result := ANALYSIS_MEDIA.fullmatch(path):
+            identifier, generation, filename = result.groups()
+            self.find_asset(identifier)
+            base = self.run_jobs(self.server.analysis.directory,identifier)
+            file = (base/generation/filename).resolve()
+            if not file.is_relative_to(base) or not file.is_file(): raise RequestError("抽帧不存在。",404)
+            self.send_file(file,"image/jpeg",head)
         elif result := ASSET_PATH.fullmatch(path):
             key = result[1]
             item = self.find_asset(key)
@@ -358,6 +386,40 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             raise RequestError("指定的任务或产物不存在。", 404) from None
 
     def mutate(self, path):
+        if result := ANALYSIS_PATH.fullmatch(path):
+            identifier, action = result.groups()
+            asset = self.find_asset(identifier)
+            body = self.json_body()
+            if action == "analysis":
+                return self.respond(self.run_jobs(self.server.analysis.start,asset,body.get("language","auto")),202)
+            if action == "cancel":
+                return self.respond(self.run_jobs(self.server.analysis.cancel,identifier))
+            return self.respond(self.run_jobs(self.server.analysis.save,identifier,body))
+        if path == "/api/structure-workflows":
+            body = self.json_body()
+            selections = body.get("selections")
+            if not isinstance(selections,list) or not 1<=len(selections)<=8:
+                raise RequestError("请选择 1–8 条结构卡。")
+            cards = {}
+            for choice in selections:
+                if not isinstance(choice,dict): raise RequestError("选择格式无效。")
+                identifier = choice.get("asset_id")
+                self.find_asset(identifier)
+                card = self.run_jobs(self.server.analysis.get,identifier).get("card")
+                if not card: raise RequestError("所选素材尚无结构卡。")
+                cards[identifier] = card
+            structure = self.run_jobs(structure_workflows.compose_structure,cards,selections)
+            base = body.get("base_skill", "")
+            if base not in ("", "pencil-drawing"): raise RequestError("基础流程无效。")
+            steps = "\n".join(structure["rules"])
+            steps += "\n区段时长（秒）："+", ".join(str(b["duration"]) for b in structure["beats"])
+            if base: steps += "\n沿用用户已安装的铅笔画 Skill；先审样片，确认后才做全片。"
+            payload = {"title":body.get("title"),"description":"从已核对结构卡提炼的本机工作流。","details":steps}
+            return self.respond(self.run_jobs(workflows.create_workflow,self.root,payload,structure,base),201)
+        if path == "/api/structure-drafts":
+            body = self.json_body()
+            workflow = self.run_jobs(workflows.resolve_workflow,self.root,body.get("workflow_id"))
+            return self.respond(self.run_jobs(structure_workflows.draft_script,workflow.get("structure",{}),body.get("topic"),body.get("points")))
         if path == "/api/assets":
             return self.add_asset()
         if path == "/api/workflows":
@@ -472,12 +534,15 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description="仅本机访问的视频素材工作台")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--data-dir", type=Path, help="独立素材与任务目录；默认沿用源码目录")
     args = parser.parse_args()
-    root = Path(__file__).resolve().parent
+    code_root = Path(__file__).resolve().parent
+    root = (args.data_dir or code_root).expanduser().resolve()
+    root.mkdir(parents=True,exist_ok=True)
     def on_term(_signum, _frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, on_term)
-    with WorkbenchServer(root, args.port) as server:
+    with WorkbenchServer(root, args.port, code_root/"ui") as server:
         print(f"http://127.0.0.1:{server.server_port}/", flush=True)
         try:
             server.serve_forever()

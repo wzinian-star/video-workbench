@@ -1,13 +1,31 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>视频工作台</title><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>视频工作台</title><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script><script defer src="/analysis.js"></script></head>
 <body data-ui>
 <header class="top">
   <div class="brand"><svg class="mark" viewBox="0 0 30 30" width="31" height="31" fill="none" aria-hidden="true"><path d="M4 7.5h22v15H4zM8 7.5v15m14-15v15M4 12h4m-4 6h4m14-6h4m-4 6h4M13 12v6l5-3-5-3Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>视频工作台</span></div>
-  <div class="flow" aria-label="制作步骤"><span>选参考</span><span>→</span><span>做样片</span><span>→</span><span>审片后做全片</span></div>
+  <nav class="view-nav" aria-label="工作区"><button type="button" id="view-analysis" aria-pressed="true">拆解与复用</button><button type="button" id="view-production" aria-pressed="false">制作与审片</button></nav>
   <span class="local-tag">Mac 本地工作区</span>
 </header>
-<div class="workspace">
+<main id="analysis-view" class="analysis-view">
+  <div class="analysis-heading"><div><h1>把这条视频的结构，用到下一条</h1><p>导入自己的视频，回看、改结构，再保存成可复用的制作流程。</p></div><span class="help">本地预览版 · 未公开发布</span></div>
+  <section id="structure-drop" class="structure-drop" aria-label="导入视频进行本地分析">
+    <div><strong>拖入一条视频，开始拆结构</strong><p class="help" id="structure-import-help">MP4 / MOV / WebM · 单文件小于 128 MB · 首轮分析前 60 秒 · 素材仅保存在本机</p></div>
+    <label class="btn primary file-button">选择视频<input id="structure-file" type="file" accept=".mp4,.m4v,.mov,.webm" aria-describedby="structure-import-help"></label>
+  </section>
+  <p id="analysis-dependencies" class="help"></p>
+  <p id="analysis-error" class="error" role="alert" hidden></p>
+  <div class="analysis-toolbar"><label for="analysis-asset">或继续已有视频</label><select id="analysis-asset"><option value="">尚未导入视频</option></select><label for="analysis-language">台词语言</label><select id="analysis-language"><option value="auto">自动</option><option value="zh">中文</option><option value="es">西语</option><option value="en">英语</option></select><button class="btn" type="button" id="analysis-retry" disabled>开始分析</button></div>
+  <section id="analysis-progress" class="analysis-progress" aria-live="polite" hidden><div><strong id="analysis-message"></strong><span id="analysis-percent"></span></div><progress id="analysis-meter" max="100" value="0"></progress><button class="btn compact" type="button" id="analysis-cancel">取消分析</button></section>
+  <section id="structure-card" hidden aria-label="视频结构卡"></section>
+  <section id="structure-reuse" class="reuse-section">
+    <div class="section-head"><h2>存成流程，下次换主题</h2><span class="help">只借鉴勾选的结构，不复制原片、文案或声音。</span></div>
+    <div class="reuse-columns"><div><h3>选要借鉴的维度</h3><div id="reuse-sources"><p class="empty">完成分析后，这里会出现可选择的结构卡。</p></div><label>工作流名称<input id="structure-workflow-title" maxlength="80" placeholder="如：问题开场 · 场景示范 · 一句收束"></label><label class="dim base-option"><input type="checkbox" id="structure-pencil">叠加我已有的「铅笔画」流程</label><p class="help">铅笔画制作需你已安装对应 Skill；结构分析与脚本草案不需要。</p><button type="button" class="btn" id="structure-save-workflow">保存为工作流</button></div>
+    <div><h3>换一个自己的主题</h3><label>复用哪个工作流<select id="structure-workflow"><option value="">先保存一个结构流程</option></select></label><label>新主题<input id="structure-topic" maxlength="160" placeholder="如：第一次在咖啡馆点单"></label><label>自己的内容（每行：画面动作｜台词）<textarea id="structure-points" rows="3" placeholder="手指菜单上的拿铁｜Un café con leche, por favor.&#10;手指小杯｜Pequeño, por favor.&#10;接过杯子点头｜Gracias."></textarea></label><button type="button" class="btn" id="structure-draft">生成脚本与分镜草案</button><p class="help">本机按结构套用你的要点，可编辑；不会调用云端，也不会自动制作成片。</p></div></div>
+    <div id="structure-draft-result" hidden></div>
+  </section>
+</main>
+<div class="workspace" id="production-view" hidden>
   <aside id="library" class="panel library" aria-labelledby="library-title">
     <div class="panel-head"><h1 id="library-title">素材库</h1><button class="btn compact" id="import-open" type="button" aria-label="加入素材">＋ 加入素材</button></div>
     <label class="sr" for="search">搜索素材</label><input id="search" type="search" placeholder="搜索名称或素材编号" autocomplete="off">

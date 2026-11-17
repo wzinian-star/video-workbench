@@ -239,6 +239,7 @@ async function refresh(){
     if(ass!==lastAssetSig){lastAssetSig=ass;state.assets=Array.isArray(next.assets)?next.assets:[];renderLibrary();renderReferences();renderVoices();}
     if(ss!==lastSkillSig){lastSkillSig=ss;state.skills=Array.isArray(next.skills)?next.skills:[];renderSkill();}
     updateVoiceGate();renderJobs();
+    document.dispatchEvent(new CustomEvent('workbench-state',{detail:next}));
   })();
   try{await refreshing;}finally{refreshing=null;}
 }

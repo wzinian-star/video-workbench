@@ -44,7 +44,7 @@ def resolve_workflow(root: Path, identifier: str) -> dict:
         raise WorkflowError('找不到所选工作流，请刷新后重选。',422)
     return record
 
-def create_workflow(root: Path, payload: dict) -> dict:
+def create_workflow(root: Path, payload: dict, structure=None, base_skill="") -> dict:
     def field(name,label,limit,required=False):
         value=payload.get(name,'')
         if not isinstance(value,str) or '\0' in value:
@@ -59,6 +59,9 @@ def create_workflow(root: Path, payload: dict) -> dict:
     record={'id':'workflow-'+uuid.uuid4().hex[:16], 'title':title,
             'description':description or '自定义工作流，按保存的制作规则执行。',
             'details':details, 'source':'custom', 'requires_voice':True, 'base_skill':''}
+    if structure is not None:
+        record['structure']=structure
+        record['base_skill']=base_skill
     path=Path(root)/'workflows.json'
     with _LOCK:
         current=_read(root)

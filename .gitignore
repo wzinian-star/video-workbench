@@ -4,6 +4,7 @@
 /catalog.json
 /workflows.json
 /.reference_audio/
+/.analysis/
 /.tools/
 *.mp4
 *.m4v
